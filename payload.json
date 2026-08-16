@@ -1,0 +1,1 @@
+﻿{"httpMethod": "POST", "path": "/agent/chat", "body": "{\"message\":\"bonjour\"}"}

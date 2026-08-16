@@ -1,0 +1,12 @@
+{
+  "api_key": {
+    "S": "5YBwFP53ye6ewKpTLpBX67oG3dvhnvc31Dewg0ve"
+  },
+  "active": {
+    "BOOL": true
+  },
+  "label": {
+    "S": "streamlit-app"
+  }
+}
+

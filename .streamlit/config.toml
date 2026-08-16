@@ -1,0 +1,8 @@
+# À placer dans un dossier ".streamlit/config.toml" à côté de UI.py.
+# Aligne les composants natifs Streamlit (focus, spinners, liens...) sur
+# le rose Smartovate, tout en laissant Streamlit gérer lui-même la bascule
+# clair/sombre (backgroundColor / secondaryBackgroundColor / textColor ne
+# sont volontairement PAS fixés ici, pour que le mode sombre continue de
+# fonctionner correctement).
+[theme]
+primaryColor = "#E63E6D"

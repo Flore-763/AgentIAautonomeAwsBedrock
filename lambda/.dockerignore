@@ -1,0 +1,57 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+*.whl
+
+# Virtual Environment
+.venv
+venv
+ENV
+env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# AWS/CDK
+cdk.out
+cdk.context.json
+*.tfstate
+*.tfstate.*
+
+# Logs
+*.log
+*.csv
+*.xlsx
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+tests/
+test_*.py
+
+# Documentation
+*.md
+docs/
+README.md
+
+# Node (si présent)
+node_modules
+package-lock.json
