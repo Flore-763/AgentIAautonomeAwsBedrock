@@ -562,8 +562,8 @@ class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
             agent_lambda
         )
 
-        ### Permissions lambda sur dynamodb
+       
 
-        knowledge_bucket.grant_read_write(  # lambda peut juste lire
+        knowledge_bucket.grant_read_write(  # lambda peut  lire et ecrire
             agent_lambda
         )
