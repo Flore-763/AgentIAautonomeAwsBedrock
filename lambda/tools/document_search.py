@@ -79,7 +79,7 @@ def search_user_documents(
             user_sub,
             session_id,
         )
-        print(f"🔎 SEARCH: user_sub={user_sub!r} session_id={session_id!r} -> indexed_session_id={indexed_session_id!r}")
+        print(f" SEARCH: user_sub={user_sub!r} session_id={session_id!r} -> indexed_session_id={indexed_session_id!r}")
 
         search_query = {
             "size": 5,

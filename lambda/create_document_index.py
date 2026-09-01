@@ -25,7 +25,7 @@ awsauth = AWS4Auth(
     credentials.access_key,
     credentials.secret_key,
     region,
-    "aoss",  # ✅ Correct for OpenSearch Serverless
+    "aoss",  #  Correct for OpenSearch Serverless
     session_token=credentials.token
 )
 
@@ -117,5 +117,5 @@ else:
         body=body
     )
     print(
-        f"✅ Index '{INDEX_NAME}' créé."
+        f" Index '{INDEX_NAME}' créé."
     )

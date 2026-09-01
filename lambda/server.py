@@ -99,13 +99,13 @@ def process_chat_stream(message: str, user_sub:str,session_id: str = None, max_i
     if session_id and "#" in session_id:
         # Extraire la partie après le dernier #
         raw_session_id = session_id.split("#")[-1]
-        print(f"🔍 Extraction du session_id brut: {raw_session_id} (depuis {session_id})")
+        print(f" Extraction du session_id brut: {raw_session_id} (depuis {session_id})")
         session_id = raw_session_id
     
     session_id = session_id or str(uuid.uuid4())
     storage_session_id = f"{user_sub}#{session_id}"
     
-    print(f"🔍 DEBUG process_chat_stream:")
+    print(f" DEBUG process_chat_stream:")
     print(f"  - user_sub: {user_sub}")
     print(f"  - session_id (brut): {session_id}")
     print(f"  - storage_session_id: {storage_session_id}")
@@ -138,15 +138,7 @@ def process_chat_stream(message: str, user_sub:str,session_id: str = None, max_i
                 "n'a été fourni."
             )
 
-        # Fichiers joints à CE tour précis, tels que rapportés par le
-        # frontend juste après leur indexation. On s'appuie dessus en
-        # PLUS de `list_session_documents` (et pas à sa place) car ce
-        # dernier interroge OpenSearch, dont la cohérence en lecture
-        # après écriture n'est pas garantie immédiate — en particulier
-        # sur un index nouvellement créé, le délai peut largement
-        # dépasser les quelques secondes couvertes par les tentatives
-        # de `document_search`. Cette info-ci, elle, vient directement
-        # du frontend et est donc fiable à 100% pour ce tour.
+        
         recent_indexed = [
             attachment.get("filename")
             for attachment in (recent_attachments or [])
@@ -219,39 +211,50 @@ def process_chat_stream(message: str, user_sub:str,session_id: str = None, max_i
             elif mode == "updates":
                 for node_name,node_data in chunk.items():
                     yield sse_event("step", {"node": node_name})
-                    if node_name == "call_model":
-                        print(f"🔍 Node 'call_model' atteint, full_answer actuel: {len(full_answer)} chars")
-                        # full_answer = current_segment
-                        # current_segment = ""
-                        if "final_answer" in node_data:
-                            full_answer=node_data["final_answer"]
+                    if node_name in ("handle_max_iterations", "handle_loop_detected"):
+                        guard_message = node_data.get("final_answer", "") if isinstance(node_data, dict) else ""
+                        if guard_message:
+                            full_answer = guard_message
+                            yield sse_event("token", guard_message)
+                    # if node_name == "call_model":
+                    #     print(f" Node 'call_model' atteint, full_answer actuel: {len(full_answer)} chars")
+                    #     if "final_answer" in node_data:
+                    #         full_answer=node_data["final_answer"]
     
     except Exception as e:
         print(f"Erreur dans graph.stream: {e}")
         yield sse_error(str(e))
         return
 
-    print(f"✅ SAUVEGARDE: full_answer = {len(full_answer)} caractères")
-    # Si final_answer n'a pas été récupéré, utiliser le dernier message
-    # if not final_answer:
-    #     # Récupérer le state final
-    #     final_state = graph.get_state(config)
-    #     if final_state and final_state.values:
-    #         final_answer = final_state.values.get("final_answer", "")
+    print(f" SAUVEGARDE: full_answer = {len(full_answer)} caractères")
     
-    # Sauvegarde finale
-    # full_answer = full_answer or current_segment
     if full_answer:
         try:
             response_embedding = invoke_titan_embedding(full_answer)
-            memory_service.batch_save_turn(
+            # Texte brut (historique court terme) -> DynamoDB.
+            user_item, assistant_item = memory_service.batch_save_turn(
                 session_id=storage_session_id,
                 user_message=message,
                 assistant_response=full_answer,
-                user_embedding=None,
-                response_embedding=None,
             )
             print(f" batch_save_turn OK pour storage_session_id={storage_session_id}")
+
+            
+            vector_store.save_document(
+                session_id=storage_session_id,
+                role="user",
+                content=message,
+                timestamp=user_item["timestamp"],
+                embedding=message_embedding,
+            )
+            vector_store.save_document(
+                session_id=storage_session_id,
+                role="assistant",
+                content=full_answer,
+                timestamp=assistant_item["timestamp"],
+                embedding=response_embedding,
+            )
+            print(f" vector_store.save_document OK (conversation-memory) pour storage_session_id={storage_session_id}")
             #Index pour le sidebar : titre = début du 1er message de l'utilisateur
             register_conversation(user_sub=user_sub,session_id=session_id,title=message)
             print(f" register_conversation OK pour user_sub={user_sub}, session_id={session_id}")
@@ -271,7 +274,7 @@ class AgentHandler(BaseHTTPRequestHandler):
     def _send_json_response(self, status_code: int, data: dict):
         """Envoie une réponse JSON standard."""
         self.send_response(status_code)
-        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.end_headers()
         self.wfile.write(json.dumps(data, default=_decimal_to_native).encode('utf-8'))
     
@@ -411,10 +414,7 @@ class AgentHandler(BaseHTTPRequestHandler):
             self._handle_stream_chat(payload)
             return
         
-        # POST /agent/chat (non-streaming)
-        # if path == "/agent/chat":
-        #     self._handle_chat(payload)
-        #     return
+        
         
         self._send_error_response(404, "Not Found")
     
@@ -456,7 +456,7 @@ class AgentHandler(BaseHTTPRequestHandler):
 
             # Envoi des headers SSE
             self.send_response(200)
-            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
             self.send_header('Cache-Control', 'no-cache')
             self.send_header('X-Accel-Buffering', 'no')  # Désactive le buffering nginx
             self.end_headers()

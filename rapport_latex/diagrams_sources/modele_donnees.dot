@@ -1,0 +1,54 @@
+digraph DataModel {
+    rankdir=TB;
+    graph [fontname="Helvetica", fontsize=11, nodesep=0.5, ranksep=0.5, bgcolor="white"];
+    node [fontname="Helvetica", fontsize=9.5, shape=none, margin=0];
+
+    agent_memory [label=<
+        <table border="1" cellborder="1" cellspacing="0" cellpadding="6" bgcolor="#EAF2FB" color="#2E5C8A">
+        <tr><td bgcolor="#2E5C8A"><font color="white"><b>AgentMemoryTable (DynamoDB)</b></font></td></tr>
+        <tr><td align="left"><b>PK</b> session_id (String)</td></tr>
+        <tr><td align="left"><b>SK</b> timestamp (String, ISO 8601)</td></tr>
+        <tr><td align="left">role (user / assistant / tool)</td></tr>
+        <tr><td align="left">content (String)</td></tr>
+        <tr><td align="left">ttl (Number — 30 jours)</td></tr>
+        </table>
+    >];
+
+    rate_limit [label=<
+        <table border="1" cellborder="1" cellspacing="0" cellpadding="6" bgcolor="#EAF2FB" color="#2E5C8A">
+        <tr><td bgcolor="#2E5C8A"><font color="white"><b>RateLimitTable (DynamoDB)</b></font></td></tr>
+        <tr><td align="left"><b>PK</b> rate_limit_key (api_key#fenêtre)</td></tr>
+        <tr><td align="left">request_count (Number)</td></tr>
+        <tr><td align="left">ttl (Number)</td></tr>
+        </table>
+    >];
+
+    api_keys [label=<
+        <table border="1" cellborder="1" cellspacing="0" cellpadding="6" bgcolor="#EAF2FB" color="#2E5C8A">
+        <tr><td bgcolor="#2E5C8A"><font color="white"><b>ApiKeysTable (DynamoDB)</b></font></td></tr>
+        <tr><td align="left"><b>PK</b> api_key (String)</td></tr>
+        <tr><td align="left">valid (Boolean)</td></tr>
+        </table>
+    >];
+
+    conv_index [label=<
+        <table border="1" cellborder="1" cellspacing="0" cellpadding="6" bgcolor="#EAF2FB" color="#2E5C8A">
+        <tr><td bgcolor="#2E5C8A"><font color="white"><b>ConversationsIndexTable (DynamoDB)</b></font></td></tr>
+        <tr><td align="left"><b>PK</b> user_sub (String)</td></tr>
+        <tr><td align="left"><b>SK</b> session_id (String)</td></tr>
+        <tr><td align="left">title, last_updated</td></tr>
+        </table>
+    >];
+
+    opensearch [label=<
+        <table border="1" cellborder="1" cellspacing="0" cellpadding="6" bgcolor="#FDEFD3" color="#B8860B">
+        <tr><td bgcolor="#B8860B"><font color="white"><b>OpenSearch Serverless — collection "agent-memory"</b></font></td></tr>
+        <tr><td align="left"><b>index</b> conversation-memory : embedding (k-NN 1536d), session_id, role, content, timestamp<br/>— tours de conversation (session_id réel) ET base de connaissance interne Smartovate (session_id = "knowledge_base")</td></tr>
+        <tr><td align="left"><b>index</b> document-memory : embedding, session_id ("document:user_sub:session_id"), filename, chunk_id, content, record_type="user_document"<br/>— documents uploadés par l'utilisateur</td></tr>
+        </table>
+    >];
+
+    agent_memory -> opensearch [style=invis];
+    { rank=same; agent_memory; rate_limit; }
+    { rank=same; api_keys; conv_index; }
+}

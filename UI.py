@@ -325,6 +325,36 @@ def get_cookie_manager() -> stx.CookieManager:
     return st.session_state.cookie_manager
 
 
+def get_all_cookies_or_none() -> dict | None:
+    """
+    Équivalent de `CookieManager.get_all()`, mais capable de renvoyer
+    None tant que le composant JS n'a pas encore répondu.
+
+    BUG CORRIGÉ : `CookieManager.get_all()` (lib extra_streamlit_components)
+    appelle son component avec `default={}` en dur. Résultat : au tout
+    premier rendu d'une session fraîche (juste après un F5), AVANT même
+    que le navigateur ait eu le temps de renvoyer les vrais cookies au
+    composant, l'appel renvoie déjà `{}` — un dict vide, jamais None.
+    Le code plus bas testait `if cookies is None: st.stop()` pour
+    attendre ce premier aller-retour JS ; comme `{}` n'est jamais None,
+    ce test ne se déclenchait JAMAIS, et le code concluait "pas de
+    cookie" un cycle trop tôt, avant que le vrai refresh_token n'ait pu
+    être lu. D'où le retour systématique à l'écran de login après un
+    simple rafraîchissement de page.
+
+    On contourne en rappelant directement le component sous-jacent avec
+    `default=None`, ce qui permet de vraiment distinguer "composant pas
+    encore prêt" (None -> on attend) de "prêt, et aucun cookie" (dict,
+    possiblement vide).
+    """
+    manager = get_cookie_manager()
+    manager._remove_extra_spacing()
+    cookies = manager.cookie_manager(method="getAll", key="get_all", default=None)
+    if cookies is not None:
+        manager.cookies = cookies
+    return cookies
+
+
 # =====================================================================
 # APPELS COGNITO
 # =====================================================================
@@ -1059,7 +1089,7 @@ if not st.session_state.logged_in:
     # Tentative de reconnexion silencieuse via le cookie de refresh_token
     # AVANT d'afficher le formulaire de login (comportement "vraie web app").
     if "restore_attempted" not in st.session_state:
-        cookies = get_cookie_manager().get_all()
+        cookies = get_all_cookies_or_none()
         if cookies is None:
             st.stop()  # composant pas encore prêt, on attend son rerun auto
         st.session_state.restore_attempted = True

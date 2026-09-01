@@ -36,7 +36,7 @@ def index_pdfs_in_directory(directory: str) -> None:
             continue
 
         pdf_path = os.path.join(directory, filename)
-        print(f"📄 Indexation de {filename}...")
+        print(f" Indexation de {filename}...")
 
         # Extraire le texte de toutes les pages.
         reader = PdfReader(pdf_path)
@@ -67,7 +67,7 @@ def index_pdfs_in_directory(directory: str) -> None:
             if i % 10 == 0:
                 print(f"   {i + 1}/{len(chunks)} chunks indexés")
 
-        print(f"✅ {filename} indexé ({len(chunks)} chunks)")
+        print(f" {filename} indexé ({len(chunks)} chunks)")
 
 
 if __name__ == "__main__":

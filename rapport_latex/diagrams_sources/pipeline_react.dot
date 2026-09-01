@@ -1,0 +1,28 @@
+digraph ReAct {
+    rankdir=TB;
+    graph [fontname="Helvetica", fontsize=11, nodesep=0.5, ranksep=0.55, bgcolor="white"];
+    node [fontname="Helvetica", fontsize=10.5, shape=box, style="rounded,filled", fillcolor="#EAF2FB", color="#2E5C8A", penwidth=1.3, margin=0.2];
+    edge [fontname="Helvetica", fontsize=9.5, color="#555555", penwidth=1.1];
+
+    START [shape=circle, style=filled, fillcolor="#333333", fontcolor=white, label="START", width=0.9, fixedsize=true];
+    call_model [label="call_model\nAppel Bedrock (Claude)\nstreaming token par token"];
+    route1 [shape=diamond, style="filled", fillcolor="#FDEFD3", color="#B8860B", label="route_after_model", fontsize=9.5];
+    call_tools [label="call_tools\nExécute l'outil demandé\n(calculator, get_weather,\ntavily_web_search,\nrecherche_documentaire,\ndocument_search)"];
+    route2 [shape=diamond, style="filled", fillcolor="#FDEFD3", color="#B8860B", label="route_after_tools", fontsize=9.5];
+    finalize [label="finalize\nExtrait la réponse finale", fillcolor="#DFF5E1", color="#3C8C3C"];
+    max_iter [label="handle_max_iterations\n⚠ plafond atteint\n(défaut 10 / max 20)", fillcolor="#FBE3E3", color="#A94442"];
+    loop_det [label="handle_loop_detected\n⚠ même outil + mêmes args\nrépété 3 fois", fillcolor="#FBE3E3", color="#A94442"];
+    END [shape=circle, style=filled, fillcolor="#333333", fontcolor=white, label="END", width=0.9, fixedsize=true];
+
+    START -> call_model;
+    call_model -> route1;
+    route1 -> finalize [label="  pas d'appel d'outil"];
+    route1 -> call_tools [label="  appel(s) d'outil(s)"];
+    route1 -> max_iter [label="  plafond atteint", style=dashed];
+    call_tools -> route2;
+    route2 -> call_model [label="  historique OK"];
+    route2 -> loop_det [label="  boucle détectée", style=dashed];
+    finalize -> END;
+    max_iter -> END;
+    loop_det -> END;
+}

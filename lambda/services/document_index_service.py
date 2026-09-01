@@ -106,7 +106,7 @@ def index_document(
         indexed_chunks += 1
 
     print(
-        f"✅ INDEXATION TERMINÉE | "
+        f" INDEXATION TERMINÉE | "
         f"filename={filename!r} | "
         f"chunks={indexed_chunks} | "
         f"session={indexed_session_id!r}"
@@ -127,7 +127,7 @@ def index_document(
 
     if not ready:
         print(
-            f"⚠️ Le document {filename!r} est indexé mais pas encore "
+            f" Le document {filename!r} est indexé mais pas encore "
             "confirmé comme cherchable en KNN (le graphe AOSS est "
             "peut-être encore en cours de construction). "
             "Les premières questions pourraient nécessiter un nouvel essai."
@@ -183,7 +183,7 @@ def _wait_until_knn_searchable(
             if hits:
                 return True
         except Exception as error:
-            print(f"⚠️ _wait_until_knn_searchable erreur (tentative {attempt}): {error}")
+            print(f" _wait_until_knn_searchable erreur (tentative {attempt}): {error}")
 
         if attempt < attempts:
             time.sleep(delay_seconds)
@@ -194,7 +194,7 @@ def _wait_until_knn_searchable(
 def list_session_documents(user_sub: str, session_id: str) -> list[str]:
     """Retourne les noms de fichiers déjà indexés pour cette session."""
     indexed_session_id = document_session_id(user_sub, session_id)
-    print(f"📥 INDEX: user_sub={user_sub!r} session_id={session_id!r} -> indexed_session_id={indexed_session_id!r}")
+    print(f" INDEX: user_sub={user_sub!r} session_id={session_id!r} -> indexed_session_id={indexed_session_id!r}")
     query = {
         "size": 0,
         "query": {

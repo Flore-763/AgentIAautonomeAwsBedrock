@@ -64,13 +64,31 @@ def process_chat_message(
     final_answer = final_state.get("final_answer") or "Désolé, je n'ai pas pu générer de réponse."
     
     # 4. Sauvegarde
+    # Texte brut (historique court terme) -> DynamoDB.
     response_embedding = invoke_titan_embedding(final_answer)
-    memory_service.batch_save_turn(
+    user_item, assistant_item = memory_service.batch_save_turn(
         session_id=session_id,
         user_message=message,
         assistant_response=final_answer,
-        user_embedding=message_embedding,
-        response_embedding=response_embedding,
+    )
+    # Embeddings (mémoire sémantique long terme) -> OpenSearch
+    # ("conversation-memory"), pas DynamoDB : c'est vector_store qui sait
+    # faire la recherche k-NN utilisée plus haut par semantic_search().
+    # On réutilise le même timestamp que l'item DynamoDB pour que les deux
+    # stores restent alignés sur ce tour.
+    vector_store.save_document(
+        session_id=session_id,
+        role="user",
+        content=message,
+        timestamp=user_item["timestamp"],
+        embedding=message_embedding,
+    )
+    vector_store.save_document(
+        session_id=session_id,
+        role="assistant",
+        content=final_answer,
+        timestamp=assistant_item["timestamp"],
+        embedding=response_embedding,
     )
     
     return {

@@ -9,10 +9,10 @@ from aws_cdk import (
     aws_cognito as cognito,
     RemovalPolicy, # definit ce qui arrive aux ressources quand je detruis le stack
     aws_opensearchserverless as aoss,
+    aws_secretsmanager as secretsmanager,
     CfnOutput   # permet d'afficher une valeur utilse apres le deploiement, par exemple l'endpoint OpenSearch
 )
 import json
-import os
 from constructs import Construct # construct est un bloc d'infrastructure: table dynamo,lambda,..
 
 class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
@@ -220,7 +220,7 @@ class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
                 require_symbols=False,
             ),
             account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
-            removal_policy=RemovalPolicy.DESTROY, # en dev :cdk destroy supprime aussi les comptes
+            removal_policy=RemovalPolicy.RETAIN, # en dev :cdk destroy supprime aussi les comptes
         )
 
 
@@ -247,6 +247,35 @@ class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
         CfnOutput(self,"cognito_client_id",value=user_pool_client.user_pool_client_id)
 
 
+        ### Secret Tavily (clé API) — Secrets Manager, pas une variable
+        # d'environnement shell.
+        #
+        # AVANT : `TAVILY_API_KEY` venait de `os.getenv("TAVILY_API_KEY", "")`,
+        # lu depuis le shell AU MOMENT DU `cdk synth`/`cdk deploy` -> il
+        # fallait retaper `$env:TAVILY_API_KEY="..."` avant chaque déploiement,
+        # sinon la clé repartait vide dans le template CloudFormation.
+        #
+        # MAINTENANT : on référence un secret Secrets Manager déjà existant,
+        # PAR SON NOM. CDK ne lit jamais la valeur du secret (elle ne
+        # transite donc jamais par le template CloudFormation ni par le
+        # terminal) : le Lambda ira la chercher lui-même, une fois par
+        # "warm start", via boto3 (voir tools/tavily_web_search.py).
+        #
+        # Le secret doit exister AVANT le premier `cdk deploy`, mais une
+        # SEULE fois, jamais à chaque déploiement :
+        #   aws secretsmanager create-secret \
+        #       --name agent-ia/tavily-api-key \
+        #       --secret-string "votre-vraie-cle-tavily"
+        #
+        # Pour la faire tourner (rotation manuelle) plus tard, sans jamais
+        # toucher au code ni au déploiement :
+        #   aws secretsmanager put-secret-value \
+        #       --secret-id agent-ia/tavily-api-key \
+        #       --secret-string "nouvelle-cle"
+        tavily_secret = secretsmanager.Secret.from_secret_name_v2(
+            self, "TavilyApiKeySecret", "agent-ia/tavily-api-key"
+        )
+
         ### l'Agent lambda
 
         agent_lambda = lambda_.DockerImageFunction(
@@ -264,7 +293,9 @@ class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
             environment={
                 "TABLE_NAME": agent_memory_table.table_name,
                 "OPENSEARCH_ENDPOINT": vector_collection.attr_collection_endpoint,
-                "TAVILY_API_KEY": os.getenv("TAVILY_API_KEY", ""),
+                # Nom du secret, pas la clé elle-même : voir TavilyApiKeySecret
+                # ci-dessus. Récupérée au runtime via boto3 secretsmanager.
+                "TAVILY_SECRET_NAME": tavily_secret.secret_name,
                 "AWS_LWA_INVOKE_MODE": "RESPONSE_STREAM",
                 "RATE_LIMIT_TABLE_NAME": rate_limit_table.table_name,
                 "API_KEYS_TABLE_NAME": api_keys_table.table_name,
@@ -275,35 +306,18 @@ class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
             }
         )
 
-        # fn_url = lambda_.FunctionUrl(
-        #     self,
-        #     "AgentFunctionUrl",
-        #     function=agent_lambda,
-        #     auth_type=lambda_.FunctionUrlAuthType.NONE,  # doit etre obligatoirement en NONE si on veut du stream sse .
-        #     invoke_mode=lambda_.InvokeMode.RESPONSE_STREAM
-        # )
-
-        # # Politique de ressource explicite autorisant l'invocation PUBLIQUE
-        # # de la Function URL. Indispensable avec AuthType.NONE : CDK ne
-        # # l'ajoute PAS automatiquement quand on construit `FunctionUrl(...)`
-        # # directement (contrairement à `agent_lambda.add_function_url(...)`,
-        # # qui gère ça tout seul). Sans cette permission, AWS répond 403
-        # # "Forbidden" avant même que le code Python de server.py ne soit
-        # # exécuté — la sécurité applicative (x-api-key + token Cognito)
-        # # n'a alors jamais l'occasion de s'appliquer.
-        # agent_lambda.add_permission(
-        #     "PublicInvokeFunctionUrl",
-        #     principal=iam.AnyPrincipal(),
-        #     action=["lambda:InvokeFunctionUrl","lambda:InvokeFunction"],
-        #     function_url_auth_type=lambda_.FunctionUrlAuthType.NONE,
-        # )
-
+        
         fn_url = agent_lambda.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.NONE,
             invoke_mode=lambda_.InvokeMode.RESPONSE_STREAM,
         )
 
         CfnOutput(self, "agent_lambda", value=fn_url.url)
+
+        # Autorise le Lambda à lire (et SEULEMENT lire) la valeur du secret
+        # Tavily au runtime — c'est ce qui remplace `TAVILY_API_KEY` en
+        # clair dans les variables d'environnement.
+        tavily_secret.grant_read(agent_lambda)
 
         # Permission pour le compteur de rate limiting (lecture + écriture,
         # UpdateItem uniquement en pratique, cf. rate_limit_service.py)
@@ -403,10 +417,7 @@ class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
                     "bedrock:Converse",
                     "bedrock:ConverseStream"
                 ],
-                # resources=[
-                #     "arn:aws:bedrock:*::foundation-model/*",     # ← Autorise TOUS les modèles de base
-                #     f"arn:aws:bedrock:*:{Stack.account}:inference-profile/*"  # ← Autorise TOUS les profils
-                # ]
+                
                 resources=[
                     # Pour les inference profiles (cross-region)
                     "arn:aws:bedrock:*:*:inference-profile/*",
@@ -442,7 +453,6 @@ class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
             apigateway.LambdaIntegration(
                 agent_lambda,
                 proxy=True,  # ← Important pour le streaming !
-                # Pour le streaming, ajoute ces options :
                 request_parameters={
                     "integration.request.header.Content-Type": "'text/event-stream'"
                 }
@@ -472,10 +482,7 @@ class AwsAiAgentStack(Stack): # classe qui decrit mon infrastructure
                 "chat"
             )
         )
-        # chat_resource.add_method(
-        #     "POST",
-        #     lambda_integration
-        # )
+      
 
         # ===== AJOUTER CETTE ROUTE POUR LE STREAMING =====
         stream_chat_resource = (

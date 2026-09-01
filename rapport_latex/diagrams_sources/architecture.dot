@@ -1,0 +1,61 @@
+digraph Architecture {
+    rankdir=LR;
+    graph [fontname="Helvetica", fontsize=11, splines=ortho, nodesep=0.45, ranksep=0.7, bgcolor="white"];
+    node [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled", fillcolor="#EAF2FB", color="#2E5C8A", penwidth=1.3, margin=0.18];
+    edge [fontname="Helvetica", fontsize=9, color="#555555", penwidth=1.1];
+
+    subgraph cluster_client {
+        label="Client";
+        fontname="Helvetica-Bold"; fontsize=12; color="#888888"; style=rounded;
+        UI [label="Interface Streamlit\n(UI.py)"];
+    }
+
+    subgraph cluster_auth {
+        label="Authentification";
+        fontname="Helvetica-Bold"; fontsize=12; color="#888888"; style=rounded;
+        Cognito [label="Amazon Cognito\n(User Pool)\nJWT (id_token)"];
+    }
+
+    subgraph cluster_compute {
+        label="Calcul (AWS Lambda)";
+        fontname="Helvetica-Bold"; fontsize=12; color="#888888"; style=rounded;
+        Lambda [label="AWS Lambda\n(image Docker)\nFunction URL + streaming SSE\nserver.py", fillcolor="#FDEFD3", color="#B8860B"];
+        Agent [label="Agent LangGraph\n(pattern ReAct)\ngraph/nodes.py", fillcolor="#FDEFD3", color="#B8860B"];
+    }
+
+    subgraph cluster_ai {
+        label="IA générative";
+        fontname="Helvetica-Bold"; fontsize=12; color="#888888"; style=rounded;
+        Bedrock [label="Amazon Bedrock\nClaude (chat)\nTitan (embeddings)"];
+    }
+
+    subgraph cluster_storage {
+        label="Stockage \/ Mémoire";
+        fontname="Helvetica-Bold"; fontsize=12; color="#888888"; style=rounded;
+        DynamoDB [label="Amazon DynamoDB\nHistorique · Rate limit\nClés API · Index conversations"];
+        OpenSearch [label="OpenSearch Serverless\nMémoire vectorielle (k-NN)\nconversation-memory\ndocument-memory"];
+        S3 [label="Amazon S3\nDocuments utilisateurs"];
+        Secrets [label="Secrets Manager\nClé API Tavily"];
+    }
+
+    subgraph cluster_ext {
+        label="Services externes";
+        fontname="Helvetica-Bold"; fontsize=12; color="#888888"; style=rounded;
+        Tavily [label="Tavily API\n(recherche web)", shape=box, style="rounded,filled", fillcolor="#F5E6E6", color="#A94442"];
+        OpenMeteo [label="Open-Meteo API\n(météo)", shape=box, style="rounded,filled", fillcolor="#F5E6E6", color="#A94442"];
+    }
+
+    CloudWatch [label="Amazon CloudWatch\nLogs & traces ReAct", shape=box, style="rounded,filled", fillcolor="#EFEFEF", color="#666666"];
+
+    UI -> Lambda [label="  HTTPS + SSE\n  x-api-key / Bearer JWT"];
+    Cognito -> UI [label="  id_token", style=dashed];
+    Lambda -> Agent;
+    Agent -> Bedrock [label="  Converse /\n  ConverseStream"];
+    Agent -> DynamoDB [label="  historique"];
+    Agent -> OpenSearch [label="  recherche\n  sémantique"];
+    Agent -> S3 [label="  documents"];
+    Agent -> Secrets [label="  clé Tavily"];
+    Agent -> Tavily [label="  recherche web"];
+    Agent -> OpenMeteo [label="  météo"];
+    Lambda -> CloudWatch [style=dashed];
+}

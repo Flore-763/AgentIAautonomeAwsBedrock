@@ -40,7 +40,14 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from config import table
-from utils import generate_timestamp, get_expiration_time, to_decimal_list
+from utils import generate_timestamp, get_expiration_time
+
+# NOTE : les embeddings NE sont PLUS stockés ici. DynamoDB ne sait pas
+# faire de recherche vectorielle (k-NN) — les y stocker ne servait qu'à
+# gonfler la taille des items pour rien. Les embeddings vivent désormais
+# uniquement dans OpenSearch (index "conversation-memory", cf.
+# `vector_store.py`), qui est l'outil fait pour ça. Ce module reste
+# responsable du texte brut (historique court terme / fenêtre glissante).
 
 
 class MemoryService:
@@ -54,9 +61,8 @@ class MemoryService:
         session_id: str,
         role: str,
         content: str,
-        embedding: Optional[List[float]] = None,
     ) -> Dict[str, Any]:
-        """Sauvegarde un message (user, assistant ou tool) dans DynamoDB."""
+        """Sauvegarde un message (user, assistant ou tool) dans DynamoDB (texte brut, sans embedding)."""
         item = {
             "session_id": session_id,
             "timestamp": generate_timestamp(),
@@ -64,10 +70,6 @@ class MemoryService:
             "content": content,
             "ttl": get_expiration_time(),
         }
-        if embedding is not None:
-            # DynamoDB (boto3.resource) refuse les float natifs Python : il
-            # exige des Decimal. Voir utils.to_decimal_list.
-            item["embedding"] = to_decimal_list(embedding)
 
         try:
             self.table.put_item(Item=item)
@@ -76,17 +78,13 @@ class MemoryService:
             print(f" Erreur DynamoDB lors de l'écriture : {error}")
             raise
 
-    def save_user_message(
-        self, session_id: str, message: str, embedding: Optional[List[float]] = None
-    ) -> Dict[str, Any]:
+    def save_user_message(self, session_id: str, message: str) -> Dict[str, Any]:
         """Sauvegarde un message utilisateur."""
-        return self.save_conversation_turn(session_id, "user", message, embedding)
+        return self.save_conversation_turn(session_id, "user", message)
 
-    def save_assistant_response(
-        self, session_id: str, response: str, embedding: Optional[List[float]] = None
-    ) -> Dict[str, Any]:
+    def save_assistant_response(self, session_id: str, response: str) -> Dict[str, Any]:
         """Sauvegarde une réponse assistant."""
-        return self.save_conversation_turn(session_id, "assistant", response, embedding)
+        return self.save_conversation_turn(session_id, "assistant", response)
 
     def log_tool_call(self, tool_name: str, tool_args: Dict, output: str, duration: float) -> None:
         """
@@ -145,12 +143,19 @@ class MemoryService:
         session_id: str,
         user_message: str,
         assistant_response: str,
-        user_embedding: Optional[List[float]] = None,
-        response_embedding: Optional[List[float]] = None,
     ) -> tuple:
-        """Sauvegarde un tour complet (message utilisateur + réponse assistant)."""
-        user_item = self.save_user_message(session_id, user_message, embedding=user_embedding)
-        assistant_item = self.save_assistant_response(session_id, assistant_response, embedding=response_embedding)
+        """
+        Sauvegarde un tour complet (message utilisateur + réponse assistant)
+        dans DynamoDB, en texte brut uniquement.
+
+        Pour indexer aussi les embeddings de ce tour dans la mémoire
+        sémantique long terme, utiliser séparément
+        `vector_store.save_document(...)` (voir `agent_service.py` /
+        `server.py`) avec le `timestamp` renvoyé ici, pour que les deux
+        stores restent alignés sur le même horodatage.
+        """
+        user_item = self.save_user_message(session_id, user_message)
+        assistant_item = self.save_assistant_response(session_id, assistant_response)
         return user_item, assistant_item
 
     def format_history_response(self, session_id: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
