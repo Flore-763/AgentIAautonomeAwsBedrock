@@ -109,7 +109,25 @@ The agent can also maintain conversational context and retrieve relevant informa
 
 ---
 
-##  commands
+
+## Résumé global after evaluation
+
+- **Taux de succès** : 100.0% (23/23)
+- **Latence moyenne** : 7.64 s
+- **Latence médiane** : 6.79 s
+- **Latence P95** : 9.58 s
+- **Latence max** : 18.84 s
+
+### Métriques SSE
+
+- **TTFT moyen** : 3.6 s
+- **TTFT médian** : 2.98 s
+- **TTFT P95** : 4.97 s
+- **Chunks SSE moyens** : 60.3
+- **Débit moyen** : 7.41 chunks/s
+---
+
+##  Useful commands
 
 To manually create a virtualenv on MacOS and Linux:
 
